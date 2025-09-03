@@ -5,48 +5,45 @@ import pandas as pd
 FOLDER = "temperatures"
 
 # ------------- helpers -------------
-def get_season(month: int) -> str:
-    # Australian seasons
-    if month in (12, 1, 2):
+def get_season(month: str) -> str:
+    month = month.lower()
+    if month in ("december", "january", "february"):
         return "Summer"
-    elif month in (3, 4, 5):
+    elif month in ("march", "april", "may"):
         return "Autumn"
-    elif month in (6, 7, 8):
+    elif month in ("june", "july", "august"):
         return "Winter"
     else:
         return "Spring"
 
 # ------------- load data -------------
-if not os.path.exists(FOLDER):
-    os.makedirs(FOLDER)
-
 csv_paths = glob.glob(os.path.join(FOLDER, "*.csv"))
-
 if not csv_paths:
     print("No CSV files found in the 'temperatures' folder.")
-    print("Add some .csv files and run again.")
     raise SystemExit
 
 frames = []
 for path in csv_paths:
     try:
         df = pd.read_csv(path)
-        # basic column check
-        required = {"Date", "Station", "Temperature"}
-        if not required.issubset(df.columns):
-            print(f"Skipping {os.path.basename(path)}: missing one of {required}")
-            continue
 
-        # make sure Date is datetime, Temperature numeric
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-        df["Temperature"] = pd.to_numeric(df["Temperature"], errors="coerce")
+        # Reshape from wide (months as columns) to long format
+        df_long = df.melt(
+            id_vars=["STATION_NAME"], 
+            value_vars=[
+                "January","February","March","April","May","June",
+                "July","August","September","October","November","December"
+            ],
+            var_name="Month",
+            value_name="Temperature"
+        )
 
-        # drop rows with missing values we need
-        df = df.dropna(subset=["Date", "Temperature", "Station"])
+        # Drop missing values
+        df_long = df_long.dropna(subset=["Temperature"])
 
-        frames.append(df)
+        frames.append(df_long)
     except Exception as e:
-        print(f"Skipping {os.path.basename(path)} due to read error: {e}")
+        print(f"Skipping {os.path.basename(path)} due to error: {e}")
 
 if not frames:
     print("No valid data could be loaded from the CSV files.")
@@ -54,55 +51,56 @@ if not frames:
 
 data = pd.concat(frames, ignore_index=True)
 
-# add Season column
-data["Season"] = data["Date"].dt.month.apply(get_season)
+# Add Season column
+data["Season"] = data["Month"].apply(get_season)
 
-# ------------- 1) seasonal average across all stations & years -------------
+# -------------------------------------------------
+# 1. Seasonal Average (all stations, all years)
+# -------------------------------------------------
 seasonal_avg = data.groupby("Season")["Temperature"].mean()
 
-# write in Australian season order
-season_order = ["Summer", "Autumn", "Winter", "Spring"]
 with open("average_temp.txt", "w", encoding="utf-8") as f:
-    for s in season_order:
-        if s in seasonal_avg.index:
-            f.write(f"{s}: {seasonal_avg.loc[s]:.1f}°C\n")
+    for season in ["Summer", "Autumn", "Winter", "Spring"]:
+        if season in seasonal_avg.index:
+            f.write(f"{season}: {seasonal_avg.loc[season]:.1f}°C\n")
 
-# ------------- 2) largest temperature range per station -------------
-# range = max - min per station
-station_stats = data.groupby("Station")["Temperature"].agg(["max", "min"])
-station_stats["range"] = station_stats["max"] - station_stats["min"]
+# -------------------------------------------------
+# 2. Largest Temperature Range per Station
+# -------------------------------------------------
+station_groups = data.groupby("STATION_NAME")["Temperature"]
+ranges = station_groups.max() - station_groups.min()
 
-if station_stats["range"].empty:
-    print("No station range data.")
-else:
-    max_range_value = station_stats["range"].max()
-    winners = station_stats[station_stats["range"] == max_range_value]
+max_range = ranges.max()
+stations_with_max = ranges[ranges == max_range].index
 
-    with open("largest_temp_range_station.txt", "w", encoding="utf-8") as f:
-        for station, row in winners.iterrows():
-            f.write(
-                f"{station}: Range {row['range']:.1f}°C "
-                f"(Max: {row['max']:.1f}°C, Min: {row['min']:.1f}°C)\n"
-            )
+with open("largest_temp_range_station.txt", "w", encoding="utf-8") as f:
+    for station in stations_with_max:
+        max_temp = station_groups.max()[station]
+        min_temp = station_groups.min()[station]
+        f.write(f"{station}: Range {max_range:.1f}°C (Max: {max_temp:.1f}°C, Min: {min_temp:.1f}°C)\n")
 
-# ------------- 3) temperature stability (std dev) -------------
-std_per_station = data.groupby("Station")["Temperature"].std(ddof=1).dropna()
+# -------------------------------------------------
+# 3. Temperature Stability (StdDev)
+# -------------------------------------------------
+stddevs = station_groups.std()
 
-if std_per_station.empty:
-    # happens if every station only has one reading
-    with open("temperature_stability_stations.txt", "w", encoding="utf-8") as f:
-        f.write("Not enough data to compute standard deviations.\n")
-else:
-    min_std = std_per_station.min()
-    max_std = std_per_station.max()
+min_std = stddevs.min()
+max_std = stddevs.max()
 
-    most_stable = std_per_station[std_per_station == min_std].index.tolist()
-    most_variable = std_per_station[std_per_station == max_std].index.tolist()
+most_stable = stddevs[stddevs == min_std].index
+most_variable = stddevs[stddevs == max_std].index
 
-    with open("temperature_stability_stations.txt", "w", encoding="utf-8") as f:
-        for st in most_stable:
-            f.write(f"Most Stable: {st}: StdDev {min_std:.1f}°C\n")
-        for st in most_variable:
-            f.write(f"Most Variable: {st}: StdDev {max_std:.1f}°C\n")
+with open("temperature_stability_stations.txt", "w", encoding="utf-8") as f:
+    for station in most_stable:
+        f.write(f"Most Stable: {station}: StdDev {min_std:.1f}°C\n")
+    for station in most_variable:
+        f.write(f"Most Variable: {station}: StdDev {max_std:.1f}°C\n")
 
-print("✅ Done. Created: average_temp.txt, largest_temp_range_station.txt, temperature_stability_stations.txt")
+print("\n--- average_temp.txt ---")
+!cat average_temp.txt
+
+print("\n--- largest_temp_range_station.txt ---")
+!cat largest_temp_range_station.txt
+
+print("\n--- temperature_stability_stations.txt ---")
+!cat temperature_stability_stations.txt
