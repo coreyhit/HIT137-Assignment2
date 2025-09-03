@@ -58,7 +58,6 @@ data["Season"] = data["Month"].apply(get_season)
 # 1. Seasonal Average (all stations, all years)
 # -------------------------------------------------
 seasonal_avg = data.groupby("Season")["Temperature"].mean()
-
 with open("average_temp.txt", "w", encoding="utf-8") as f:
     for season in ["Summer", "Autumn", "Winter", "Spring"]:
         if season in seasonal_avg.index:
@@ -69,7 +68,6 @@ with open("average_temp.txt", "w", encoding="utf-8") as f:
 # -------------------------------------------------
 station_groups = data.groupby("STATION_NAME")["Temperature"]
 ranges = station_groups.max() - station_groups.min()
-
 max_range = ranges.max()
 stations_with_max = ranges[ranges == max_range].index
 
@@ -83,7 +81,6 @@ with open("largest_temp_range_station.txt", "w", encoding="utf-8") as f:
 # 3. Temperature Stability (StdDev)
 # -------------------------------------------------
 stddevs = station_groups.std()
-
 min_std = stddevs.min()
 max_std = stddevs.max()
 
@@ -96,11 +93,4 @@ with open("temperature_stability_stations.txt", "w", encoding="utf-8") as f:
     for station in most_variable:
         f.write(f"Most Variable: {station}: StdDev {max_std:.1f}°C\n")
 
-print("\n--- average_temp.txt ---")
-!cat average_temp.txt
-
-print("\n--- largest_temp_range_station.txt ---")
-!cat largest_temp_range_station.txt
-
-print("\n--- temperature_stability_stations.txt ---")
-!cat temperature_stability_stations.txt
+print("✅ Analysis complete. Results saved in text files.")
