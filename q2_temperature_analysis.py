@@ -62,36 +62,40 @@ data["Season"] = data["Month"].apply(get_season)
 
 # 1. seasonal averages
 seasonal_avg = data.groupby("Season")["Temperature"].mean()
-with open("average_temp.txt", "w") as f:
+with open("average_temp.txt", "w") as file:
     for season in ["Summer","Autumn","Winter","Spring"]:
         if season in seasonal_avg:
-            f.write(f"{season}: {seasonal_avg[season]:.1f}°C\n")
+            file.write(f"{season}: {seasonal_avg[season]:.1f}°C\n")
 
 # 2. largest temp range
 station_groups = data.groupby("STATION_NAME")["Temperature"]
 ranges = station_groups.max() - station_groups.min()
 max_range = ranges.max()
 
-with open("largest_temp_range_station.txt", "w") as f:
+with open("largest_temp_range_station.txt", "w") as file:
     for st in ranges[ranges == max_range].index:
-        f.write(f"{st}: Range {max_range:.1f}°C (Max: {station_groups.max()[st]:.1f}°C, Min: {station_groups.min()[st]:.1f}°C)\n")
+        file.write(f"{st}: Range {max_range:.1f}°C (Max: {station_groups.max()[st]:.1f}°C, Min: {station_groups.min()[st]:.1f}°C)\n")
 
 # 3. stability (std dev)
 stddevs = station_groups.std()
 min_std = stddevs.min()
 max_std = stddevs.max()
 
-with open("temperature_stability_stations.txt", "w") as f:
+with open("temperature_stability_stations.txt", "w") as file:
     for st in stddevs[stddevs == min_std].index:
-        f.write(f"Most Stable: {st}: StdDev {min_std:.1f}°C\n")
+        file.write(f"Most Stable: {st}: StdDev {min_std:.1f}°C\n")
     for st in stddevs[stddevs == max_std].index:
-        f.write(f"Most Variable: {st}: StdDev {max_std:.1f}°C\n")
+        file.write(f"Most Variable: {st}: StdDev {max_std:.1f}°C\n")
 
+# show results directly in Python (instead of !cat)
 print("\n--- average_temp.txt ---")
-!cat average_temp.txt
+with open("average_temp.txt") as file:
+    print(file.read())
 
 print("\n--- largest_temp_range_station.txt ---")
-!cat largest_temp_range_station.txt
+with open("largest_temp_range_station.txt") as file:
+    print(file.read())
 
 print("\n--- temperature_stability_stations.txt ---")
-!cat temperature_stability_stations.txt
+with open("temperature_stability_stations.txt") as file:
+    print(file.read())
